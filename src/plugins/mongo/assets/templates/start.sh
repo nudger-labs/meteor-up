@@ -3,7 +3,7 @@ set -e
 
 cat <<-CONFIG_EOT > /opt/mongodb/mongodb.conf
 dbpath=/data/db
-replSet=meteor
+replSet=<%= mongoReplicasetName %>
 CONFIG_EOT
 
 MONGO_VERSION=<%= mongoVersion %>

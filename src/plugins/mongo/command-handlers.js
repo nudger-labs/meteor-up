@@ -56,8 +56,8 @@ export function setup(api) {
     dest: '/opt/mongodb/mongo-start-new.sh',
     vars: {
       mongoVersion: mongoConfig.version,
-      mongoBindIp: config.bindIp,
-      mongoReplicasetName: config.replicasetName,
+      mongoBindIp: mongoConfig.bindIp,
+      mongoReplicasetName: mongoConfig.replicasetName,
       mongoDbDir: '/var/lib/mongodb'
     }
   });
@@ -85,13 +85,7 @@ export function start(api) {
   const list = nodemiral.taskList('Start Mongo');
 
   list.executeScript('Start Mongo', {
-    script: api.resolvePath(__dirname, 'assets/mongo-start.sh'),
-    vars: {
-      mongoVersion: config.version || '3.4.1',
-      mongoBindIp: config.bindIp || '127.0.0.1',
-      mongoReplicasetName: config.replicasetName || 'meteor',
-      mongoDbDir: '/var/lib/mongodb'
-    }
+    script: api.resolvePath(__dirname, 'assets/mongo-start.sh')
   });
 
   const sessions = api.getSessions(['mongo']);
