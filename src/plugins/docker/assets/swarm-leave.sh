@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker swarm leave --force
+sudo docker swarm leave --force || true

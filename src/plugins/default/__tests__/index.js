@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-expressions */
+import { before, describe, it } from 'mocha';
 import chai, { expect } from 'chai';
 import { countOccurences, runSSHCommand } from '../../../utils';
-import { describe, it } from 'mocha';
 import chaiString from 'chai-string';
 import fs from 'fs';
 import os from 'os';
@@ -15,6 +15,14 @@ const servers = require('../../../../tests/fixtures/servers');
 
 describe('module - default', function() {
   this.timeout(900000);
+
+  before(async () => {
+    const serverInfo = servers.mymeteor;
+    await runSSHCommand(
+      serverInfo,
+      'sudo docker rm -f $(sudo docker ps -a -q)'
+    );
+  });
 
   describe('deploy', () => {
     it('should deploy meteor app on "meteor" vm', async () => {
@@ -203,10 +211,10 @@ describe('module - default', function() {
         serverInfo,
         'sudo tail -n 100 /var/log/syslog'
       );
-      expect(out.code).to.be.equal(0);
 
+      expect(out.code).to.be.equal(0);
       expect(
-        countOccurences('=> Starting meteor app on port:80', out.output)
+        countOccurences('=> Starting meteor app on port 3000', out.output)
       ).gte(1);
     });
   });

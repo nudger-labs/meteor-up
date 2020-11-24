@@ -42,15 +42,42 @@ To run the test in parallel, add a matching regex to the `<meteor-up dir>/tests/
 
 `--path <test files>` Defaults to `src/**/__tests__/**/*.js`
 
-`--plugin <plugin name>` Runs tests for plugin. Overrides `--path`
+`--plugins mocha,meter` Runs tests for the plugins, separated by commas. Overrides `--path`
 
-`--skip-pull` To speedup running the tests, it creates a docker image before the first run that has docker installed and has pulled all of the images used during the tests. This option disables creating or using the image.
+`--non-root` Uses a non-root user in the docker container it deploys to
 
 For example:
 ```
 npm test -- --watch
 ```
 
+## Updating the Docs
+
+The `/docs` directory contains the docs hosted at [meteor-up.com](http://meteor-up.com). To run the docs website locally:
+
+##### 1 - Install NPM dependencies
+
+```
+npm install
+```
+
+##### 2 - Set-up Jekyll
+Follow the [official docs](https://jekyllrb.com/docs/installation/) for instruction on how to set-up Jekyll on your system.
+
+
+##### 3 - Install Gems
+```
+cd docs
+bundle install
+```
+
+##### 4 - Build and serve the website
+```
+cd ..
+npm run docs
+```
+
+The webiste will now be running at [http://localhost:8080/](http://localhost:8080/). 
 
 ## Financial contributions
 
