@@ -1,6 +1,6 @@
-import chalk from 'chalk';
+import { Client } from 'ssh2-classic';
 import debug from 'debug';
-import nodemiral from 'nodemiral';
+import nodemiral from '@zodern/nodemiral';
 
 const log = debug('mup:module:mongo');
 
@@ -18,8 +18,9 @@ export function logs(api) {
 
 export function setup(api) {
   log('exec => mup mongo setup');
+  const mongoConfig = api.getConfig().mongo;
 
-  if (!api.getConfig().mongo) {
+  if (!mongoConfig) {
     // could happen when running "mup mongo setup"
     console.log(
       'Not setting up built-in mongodb since there is no mongo config'
@@ -51,9 +52,13 @@ export function setup(api) {
     script: api.resolvePath(__dirname, 'assets/mongo-setup.sh')
   });
 
-  list.copy('Copying mongodb.conf', {
-    src: api.resolvePath(__dirname, 'assets/mongodb.conf'),
-    dest: '/opt/mongodb/mongodb.conf'
+  list.copy('Copying Mongo Config', {
+    src: api.resolvePath(__dirname, 'assets/templates/start.sh'),
+    dest: '/opt/mongodb/mongo-start-new.sh',
+    vars: {
+      mongoVersion: mongoConfig.version,
+      mongoDbDir: '/var/lib/mongodb'
+    }
   });
 
   const sessions = api.getSessions(['mongo']);
@@ -66,7 +71,6 @@ export function start(api) {
 
   const mongoSessions = api.getSessions(['mongo']);
   const meteorSessions = api.getSessions(['app']);
-  const config = api.getConfig().mongo;
 
   if (
     meteorSessions.length !== 1 ||
@@ -82,7 +86,7 @@ export function start(api) {
   list.executeScript('Start Mongo', {
     script: api.resolvePath(__dirname, 'assets/mongo-start.sh'),
     vars: {
-      mongoVersion: config.version || '3.4.1',
+      mongoVersion: config.version || '4.4',
       mongoBindIp: config.bindIp || '127.0.0.1',
       mongoDbDir: '/var/lib/mongodb'
     }
@@ -97,13 +101,50 @@ export function stop(api) {
   log('exec => mup mongo stop');
   const list = nodemiral.taskList('Stop Mongo');
 
-  list.executeScript('stop mongo', {
+  list.executeScript('Stop Mongo', {
     script: api.resolvePath(__dirname, 'assets/mongo-stop.sh')
   });
 
   const sessions = api.getSessions(['mongo']);
 
   return api.runTaskList(list, sessions, { verbose: api.verbose });
+}
+
+export function shell(api) {
+  const config = api.getConfig();
+
+  const mongoServer = Object.keys(config.mongo.servers)[0];
+  const server = config.servers[mongoServer];
+  const sshOptions = api._createSSHOptions(server);
+
+  const dbName = config.app.name;
+
+  const conn = new Client();
+  conn.on('ready', () => {
+    conn.exec(`docker exec -it mongodb mongo ${dbName}`, {
+      pty: true
+    }, (err, stream) => {
+      if (err) {
+        throw err;
+      }
+
+      stream.on('close', () => {
+        conn.end();
+        process.exit();
+      });
+
+      process.stdin.setRawMode(true);
+      process.stdin.pipe(stream);
+
+      stream.pipe(process.stdout);
+      stream.stderr.pipe(process.stderr);
+      stream.setWindow(process.stdout.rows, process.stdout.columns);
+
+      process.stdout.on('resize', () => {
+        stream.setWindow(process.stdout.rows, process.stdout.columns);
+      });
+    });
+  }).connect(sshOptions);
 }
 
 export async function status(api) {
@@ -115,7 +156,7 @@ export async function status(api) {
   const mongoServer = Object.keys(config.mongo.servers)[0];
   const server = config.servers[mongoServer];
 
-  const { output: dockerStatus } = await api.runSSHCommand(
+  let { output: dockerStatus } = await api.runSSHCommand(
     server,
     'docker inspect mongodb --format "{{json .}}"'
   );
@@ -129,9 +170,13 @@ export async function status(api) {
 
   try {
     mongoStatus = JSON.parse(mongoStatus);
+    dockerStatus = JSON.parse(dockerStatus);
   } catch (e) {
-    console.log(chalk.red('\n=> Mongo Status'));
-    console.log(chalk.red(' - Stopped'));
+    const display = new api.statusHelpers.StatusDisplay(
+      'Mongo Status'
+    );
+    display.addLine(' Stopped', 'red');
+    display.show();
 
     return;
   }
@@ -141,56 +186,35 @@ export async function status(api) {
   const connections = mongoStatus.connections.current;
   const storageEngine = mongoStatus.storageEngine.name;
 
-  let containerStatus;
+  const containerStatus = dockerStatus.State.Status;
   let statusColor = 'green';
-  let createdTime;
-  let restartCount = 0;
+  const createdTime = dockerStatus.Created;
+  const restartCount = dockerStatus.RestartCount;
   let restartCountColor = 'green';
-  let overallColor = 'green';
 
-  if (dockerStatus.trim() === '') {
-    containerStatus = 'Not started';
+  if (dockerStatus.State.Restarting) {
+    statusColor = 'yellow';
+  } else if (dockerStatus.State.Running !== true) {
     statusColor = 'red';
-  } else {
-    const info = JSON.parse(dockerStatus);
-    containerStatus = info.State.Status;
-
-    if (info.State.Restarting) {
-      statusColor = 'yellow';
-    } else if (info.State.Running !== true) {
-      statusColor = 'red';
-    }
-
-    const hour = 1000 * 60 * 60;
-    createdTime = info.Created;
-    const upTime = new Date(info.State.FinishedAt).getTime() -
-     new Date(info.Created).getTime();
-    restartCount = info.RestartCount;
-
-    if (restartCount > 0 && upTime / hour <= restartCount) {
-      restartCountColor = 'red';
-    } else if (restartCount > 1) {
-      restartCountColor = 'yellow';
-    }
   }
 
-  if (
-    statusColor === 'green' &&
-    restartCountColor === 'green'
-  ) {
-    overallColor = 'green';
-  } else {
-    console.log('status', statusColor === 'green');
-    console.log('restart', restartCountColor === 'green');
-    overallColor = 'red';
+  const hour = 1000 * 60 * 60;
+  const upTime = new Date(dockerStatus.State.FinishedAt).getTime() -
+    new Date(dockerStatus.Created).getTime();
+
+  if (restartCount > 0 && upTime / hour <= restartCount) {
+    restartCountColor = 'red';
+  } else if (restartCount > 1) {
+    restartCountColor = 'yellow';
   }
 
-  console.log(chalk[overallColor]('\n=> Mongo Status'));
-  console.log(chalk[statusColor](`  ${containerStatus} on server ${server.host}`));
-  console.log(chalk[restartCountColor](`  Restarted ${restartCount} times`));
-  console.log(`  Running since ${createdTime}`);
-  console.log(`  Version: ${mongoVersion}`);
-  console.log(`  BindIP: ${mongoBindIp}`);
-  console.log(`  Connections: ${connections}`);
-  console.log(`  Storage Engine: ${storageEngine}`);
+  const display = new api.statusHelpers.StatusDisplay('Mongo Status');
+  display.addLine(`${containerStatus} on server ${server.host}`, statusColor);
+  display.addLine(`Restarted ${restartCount} times`, restartCountColor);
+  display.addLine(`Running since ${createdTime}`);
+  display.addLine(`Version ${mongoVersion}`);
+  display.addLine(`BindIP ${mongoVersion}`);
+  display.addLine(`Connections: ${connections}`);
+  display.addLine(`Storage Engine: ${storageEngine}`);
+  display.show(api.getOptions().overview);
 }

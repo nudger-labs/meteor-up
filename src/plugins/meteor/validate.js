@@ -1,17 +1,18 @@
-import joi from 'joi';
+import joi from '@hapi/joi';
 
 const schema = joi.object().keys({
   name: joi.string().min(1).required(),
   path: joi.string().min(1).required(),
   port: joi.number(),
   type: joi.string(),
-  servers: joi.object().required().pattern(
+  servers: joi.object().min(1).required().pattern(
     /[/s/S]*/,
     joi.object().keys({
       env: joi.object().pattern(
         /[/s/S]*/,
         [joi.string(), joi.number(), joi.bool()]
       ),
+      bind: joi.string(),
       settings: joi.string()
     })
   ),
@@ -27,11 +28,13 @@ const schema = joi.object().keys({
     args: joi.array().items(joi.string()),
     bind: joi.string().trim(),
     prepareBundle: joi.bool(),
+    prepareBundleLocally: joi.bool(),
+    buildInstructions: joi.array().items(joi.string()),
+    stopAppDuringPrepareBundle: joi.bool(),
+    useBuildKit: joi.bool(),
     networks: joi
       .array()
-      .items(joi.string()),
-    buildInstructions: joi.array().items(joi.string()),
-    stopAppDuringPrepareBundle: joi.bool()
+      .items(joi.string())
   }),
   buildOptions: joi.object().keys({
     serverOnly: joi.bool(),
@@ -41,7 +44,8 @@ const schema = joi.object().keys({
     mobileSettings: joi.object(),
     server: joi.string().uri(),
     allowIncompatibleUpdates: joi.boolean(),
-    executable: joi.string()
+    executable: joi.string(),
+    cleanBuildLocation: joi.bool()
   }),
   env: joi
     .object()
@@ -94,6 +98,7 @@ export default function(
   }
 ) {
   let details = [];
+
   details = combineErrorDetails(
     details,
     joi.validate(config.app, schema, VALIDATE_OPTIONS)

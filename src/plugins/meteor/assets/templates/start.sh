@@ -15,11 +15,21 @@ IMAGE=<% if(docker.remoteImage){ %><%= docker.remoteImage %>
 VOLUME="--volume=$BUNDLE_PATH:/bundle"
 LOCAL_IMAGE=false
 
+<% if (!privateRegistry) { %>
 # sudo docker image inspect $IMAGE >/dev/null || IMAGE=<%= docker.image %>
 if sudo docker image inspect $IMAGE >/dev/null; then
   VOLUME=""
   LOCAL_IMAGE=true
 fi
+<% } else { %>
+  VOLUME=""
+  LOCAL_IMAGE=true
+  # We want this pull to fail on error since
+  # otherwise we might try to run an old version of the app
+  set -e
+  sudo docker pull $IMAGE
+  set +e
+<% } %>
 
 echo "Image" $IMAGE
 echo "Volume" $VOLUME
@@ -64,8 +74,8 @@ sudo docker run \
   -d \
   --restart=always \
   $VOLUME \
-  <% if((sslConfig && typeof sslConfig.autogenerate === "object") || (typeof proxyConfig === "object"))  { %> \
-  --expose=80 \
+  <% if((sslConfig && typeof sslConfig.autogenerate === "object") || (typeof proxyConfig === "object" && !proxyConfig.loadBalancing))  { %> \
+  --expose=<%= docker.imagePort %> \
   <% } else { %> \
   --publish=$BIND:$PORT:<%= docker.imagePort %> \
   <% } %> \
@@ -84,7 +94,21 @@ sudo docker run \
   --name=$APPNAME \
   $IMAGE
 echo "Ran" $IMAGE
-sleep 15s
+# When using a private docker registry, the cleanup run in 
+# Prepare Bundle is only done on one server, so we also
+# cleanup here so the other servers don't run out of disk space
+<% if (privateRegistry) { %>
+  echo "pruning images"
+  sudo docker image prune -f || true
+<% } %>
+
+if [[ $VOLUME == "" ]]; then
+  # The app starts much faster when prepare bundle is enabled,
+  # so we do not need to wait as long
+  sleep 3s
+else
+  sleep 15s
+fi
 
 <% if(typeof sslConfig === "object") { %>
    <% if(typeof sslConfig.autogenerate === "object")  { %>
@@ -100,7 +124,7 @@ EOT
     # We don't need to fail the deployment because of a docker hub downtime
     set +e
     sudo docker pull jrcs/letsencrypt-nginx-proxy-companion:$LETS_ENCRYPT_VERSION
-    sudo docker pull jwilder/nginx-proxy:$NGINX_PROXY_VERSION
+    sudo docker pull zodern/nginx-proxy:$NGINX_PROXY_VERSION
     set -e
 
     echo "Pulled autogenerate images"
@@ -113,7 +137,7 @@ EOT
       -v /opt/$APPNAME/config/vhost.d:/etc/nginx/vhost.d \
       -v /opt/$APPNAME/config/html:/usr/share/nginx/html \
       -v /var/run/docker.sock:/tmp/docker.sock:ro \
-      jwilder/nginx-proxy:$NGINX_PROXY_VERSION
+      zodern/nginx-proxy:$NGINX_PROXY_VERSION
       echo "Ran nginx-proxy"
     sleep 15s
 

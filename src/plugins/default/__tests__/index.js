@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-expressions */
+import { before, describe, it } from 'mocha';
 import chai, { expect } from 'chai';
-import { countOccurences, runSSHCommand } from '../../../utils';
-import { describe, it } from 'mocha';
+import { countOccurrences, runSSHCommand } from '../../../utils';
 import chaiString from 'chai-string';
 import fs from 'fs';
 import os from 'os';
@@ -16,6 +16,14 @@ const servers = require('../../../../tests/fixtures/servers');
 describe('module - default', function() {
   this.timeout(900000);
 
+  before(async () => {
+    const serverInfo = servers.mymeteor;
+    await runSSHCommand(
+      serverInfo,
+      'sudo docker rm -f $(sudo docker ps -a -q)'
+    );
+  });
+
   describe('deploy', () => {
     it('should deploy meteor app on "meteor" vm', async () => {
       const serverInfo = servers.mymeteor;
@@ -26,7 +34,7 @@ describe('module - default', function() {
 
       expect(out.code).to.equal(0);
       expect(
-        out.output
+        out.stdout
       ).satisfy(text => {
         if (text.indexOf('Building App Bundle Locally') > -1) {
           return true;
@@ -36,22 +44,22 @@ describe('module - default', function() {
       });
 
       expect(
-        countOccurences(
+        countOccurrences(
           'Pushing Meteor App Bundle to the Server: SUCCESS',
-          out.output
+          out.stdout
         )
       ).to.be.equal(1);
       expect(
-        countOccurences('Pushing the Startup Script: SUCCESS', out.output)
+        countOccurrences('Pushing the Startup Script: SUCCESS', out.stdout)
       ).to.be.equal(1);
       expect(
-        countOccurences('Sending Environment Variables: SUCCESS', out.output)
+        countOccurrences('Sending Environment Variables: SUCCESS', out.stdout)
       ).to.be.equal(1);
-      expect(countOccurences('Start Meteor: SUCCESS', out.output)).to.be.equal(
+      expect(countOccurrences('Start Meteor: SUCCESS', out.stdout)).to.be.equal(
         1
       );
       expect(
-        countOccurences('Verifying Deployment: SUCCESS', out.output)
+        countOccurrences('Verifying Deployment: SUCCESS', out.stdout)
       ).to.be.equal(1);
       const ssh1 = await runSSHCommand(
         serverInfo,
@@ -74,6 +82,9 @@ describe('module - default', function() {
       sh.exec('mup init');
       expect(fs.existsSync(path.resolve(dir, 'mup.js'))).to.true;
       expect(fs.existsSync(path.resolve(dir, 'settings.json'))).to.true;
+
+      // Deleting the current dir causes future sh commands to fail
+      sh.cd('..');
       sh.rm('-rf', dir);
     });
   });
@@ -96,13 +107,13 @@ describe('module - default', function() {
 
       expect(out.code).to.be.equal(0);
       expect(
-        countOccurences('Sending Environment Variables: SUCCESS', out.output)
+        countOccurrences('Sending Environment Variables: SUCCESS', out.stdout)
       ).to.be.equal(1);
-      expect(countOccurences('Start Meteor: SUCCESS', out.output)).to.be.equal(
+      expect(countOccurrences('Start Meteor: SUCCESS', out.stdout)).to.be.equal(
         1
       );
       expect(
-        countOccurences('Verifying Deployment: SUCCESS', out.output)
+        countOccurrences('Verifying Deployment: SUCCESS', out.stdout)
       ).to.be.equal(1);
       expect(
         (await runSSHCommand(serverInfo, 'curl localhost:80 && exit 0')).code
@@ -119,10 +130,10 @@ describe('module - default', function() {
       const out = sh.exec('mup restart');
 
       expect(out.code).to.be.equal(0);
-      expect(out.output).to.have.entriesCount('Stop Meteor: SUCCESS', 1);
-      expect(out.output).to.have.entriesCount('Start Meteor: SUCCESS', 1);
+      expect(out.stdout).to.have.entriesCount('Stop Meteor: SUCCESS', 1);
+      expect(out.stdout).to.have.entriesCount('Start Meteor: SUCCESS', 1);
       expect(
-        out.output
+        out.stdout
       ).to.have.entriesCount('Verifying Deployment: SUCCESS', 1);
       expect(
         (await runSSHCommand(serverInfo, 'curl localhost:80 && exit 0')).code
@@ -138,13 +149,13 @@ describe('module - default', function() {
       const out = sh.exec('mup setup');
 
       expect(out.code).to.be.equal(0);
-      expect(countOccurences('Setup Docker: SUCCESS', out.output)).to.be.equal(
+      expect(countOccurrences('Setup Docker: SUCCESS', out.stdout)).to.be.equal(
         1
       );
       expect(
-        countOccurences('Setup Environment: SUCCESS', out.output)
+        countOccurrences('Setup Environment: SUCCESS', out.stdout)
       ).to.be.equal(2);
-      expect(countOccurences('Start Mongo: SUCCESS', out.output)).to.be.equal(
+      expect(countOccurrences('Start Mongo: SUCCESS', out.stdout)).to.be.equal(
         1
       );
       expect(
@@ -162,11 +173,11 @@ describe('module - default', function() {
       const out = sh.exec('mup start');
 
       expect(out.code).to.be.equal(0);
-      expect(countOccurences('Start Meteor: SUCCESS', out.output)).to.be.equal(
+      expect(countOccurrences('Start Meteor: SUCCESS', out.stdout)).to.be.equal(
         1
       );
       expect(
-        countOccurences('Verifying Deployment: SUCCESS', out.output)
+        countOccurrences('Verifying Deployment: SUCCESS', out.stdout)
       ).to.be.equal(1);
       expect(
         (await runSSHCommand(serverInfo, 'curl localhost:80 && exit 0')).code
@@ -183,7 +194,7 @@ describe('module - default', function() {
       const out = sh.exec('mup stop');
 
       expect(out.code).to.be.equal(0);
-      expect(countOccurences('Stop Meteor: SUCCESS', out.output)).to.be.equal(
+      expect(countOccurrences('Stop Meteor: SUCCESS', out.stdout)).to.be.equal(
         1
       );
       expect(
@@ -203,10 +214,10 @@ describe('module - default', function() {
         serverInfo,
         'sudo tail -n 100 /var/log/syslog'
       );
-      expect(out.code).to.be.equal(0);
 
+      expect(out.code).to.be.equal(0);
       expect(
-        countOccurences('=> Starting meteor app on port:80', out.output)
+        countOccurrences('=> Starting meteor app on port 3000', out.output)
       ).gte(1);
     });
   });

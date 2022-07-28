@@ -1,5 +1,6 @@
 import debug from 'debug';
 import fs from 'fs';
+import rimraf from 'rimraf';
 import { spawn } from 'child_process';
 import tar from 'tar';
 
@@ -38,7 +39,7 @@ export default function buildApp(appPath, buildOptions, verbose, api) {
       }
       resolve();
     };
-    buildMeteorApp(appPath, buildOptions, verbose, code => {
+    buildMeteorApp(appPath, buildOptions, code => {
       if (code === 0) {
         callback();
 
@@ -50,9 +51,8 @@ export default function buildApp(appPath, buildOptions, verbose, api) {
   });
 }
 
-function buildMeteorApp(appPath, buildOptions, verbose, callback) {
-  let executable = buildOptions.executable || 'meteor';
-  let args = [
+function createBuildArgs(buildOptions, appPath) {
+  const args = [
     'build',
     '--directory',
     buildOptions.buildLocation,
@@ -85,12 +85,19 @@ function buildMeteorApp(appPath, buildOptions, verbose, callback) {
     args.push('--allow-incompatible-update');
   }
 
+  return args;
+}
+
+function buildMeteorApp(appPath, buildOptions, callback) {
+  let executable = buildOptions.executable || 'meteor';
+  let args = createBuildArgs(buildOptions, appPath);
+
   const isWin = /^win/.test(process.platform);
   if (isWin) {
-    // Sometimes cmd.exe not available in the path
+    // Sometimes cmd.exe is not available in the path
     // See: http://goo.gl/ADmzoD
+    args = ['/c', executable].concat(args);
     executable = process.env.comspec || 'cmd.exe';
-    args = ['/c', 'meteor'].concat(args);
   }
 
   const options = {
@@ -99,18 +106,13 @@ function buildMeteorApp(appPath, buildOptions, verbose, callback) {
       ...process.env,
       METEOR_HEADLESS: 1
     },
-    stdio: verbose ? 'inherit' : 'pipe'
+    stdio: [process.stdin, process.stdout, process.stderr]
   };
 
   log(`Build Path: ${appPath}`);
   log(`Build Command:  ${executable} ${args.join(' ')}`);
 
   const meteor = spawn(executable, args, options);
-
-  if (!verbose) {
-    meteor.stdout.pipe(process.stdout, { end: false });
-    meteor.stderr.pipe(process.stderr, { end: false });
-  }
 
   meteor.on('error', e => {
     console.log(options);
@@ -140,5 +142,19 @@ export function archiveApp(buildLocation, api, cb) {
     }
 
     cb(err);
+  });
+}
+
+export function cleanBuildDir(buildLocation) {
+  return new Promise((resolve, reject) => {
+    rimraf(buildLocation, {
+      glob: false
+    }, err => {
+      if (err) {
+        return reject(err);
+      }
+
+      return resolve();
+    });
   });
 }

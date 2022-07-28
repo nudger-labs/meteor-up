@@ -1,6 +1,7 @@
 import * as _commands from './commands';
 import _validator from './validate';
 import { defaultsDeep } from 'lodash';
+import { tmpBuildPath } from './utils';
 import traverse from 'traverse';
 
 export const description = 'Deploy and manage meteor apps';
@@ -12,7 +13,7 @@ export const validate = {
   app(config, utils) {
     if (typeof config.meteor === 'object' || (config.app && config.app.type !== 'meteor')) {
       // The meteor validator will check the config
-      // Or the config is telling a different app to handle deployment
+      // Or the config is telling a different plugin to handle deployment
       return [];
     }
 
@@ -20,7 +21,7 @@ export const validate = {
   }
 };
 
-export function prepareConfig(config) {
+export function prepareConfig(config, api) {
   if (!config.app || config.app.type !== 'meteor') {
     return config;
   }
@@ -31,6 +32,22 @@ export function prepareConfig(config) {
   });
 
   delete config.app.dockerImage;
+
+  // If imagePort is not set, use port 3000 to simplify using
+  // images that run the app with a non-root user.
+  // Port 80 was the traditional port used by kadirahq/meteord
+  // and meteorhacks/meteord, but they allow the PORT env
+  // variable to override it.
+  config.app.docker.imagePort = config.app.docker.imagePort || 3000;
+
+  const appPath = api.resolvePath(api.getBasePath(), config.app.path || '');
+
+  config.app.buildOptions = config.app.buildOptions || {};
+
+  if (config.app.buildOptions.buildLocation === undefined) {
+    config.app.buildOptions.buildLocation = tmpBuildPath(appPath, api);
+    config.app.buildOptions.cleanBuildLocation = true;
+  }
 
   return config;
 }
@@ -91,6 +108,7 @@ export function scrubConfig(config, utils) {
         case 'env.MONGO_URL':
           if (config.mongo) {
             const url = this.node.split('/');
+
             url.pop();
             url.push('my-app');
 
@@ -109,14 +127,14 @@ export function scrubConfig(config, utils) {
 
 export function swarmOptions(config) {
   if (config && config.app && config.app.type === 'meteor') {
-    return {
-      labels: Object.keys(config.app.servers).reduce((result, server) => {
-        result[server] = {
-          [`mup-app-${config.app.name}`]: 'true'
-        };
+    const label = {
+      name: `mup-app-${config.app.name}`,
+      value: 'true',
+      servers: Object.keys(config.app.servers)
+    };
 
-        return result;
-      }, {})
+    return {
+      labels: [label]
     };
   }
 }

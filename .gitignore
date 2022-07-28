@@ -3,9 +3,10 @@ node_modules
 .vscode
 .idea
 *.log
-package-lock.json
+.DS_Store
 docs/_site
 coverage
+tests/**/package-lock.json
 
 tests/ssh/
 .nyc_output/

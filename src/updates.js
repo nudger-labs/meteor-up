@@ -1,80 +1,125 @@
+import {
+  flatMap,
+  isEqual
+} from 'lodash';
+import axios from 'axios';
 import boxen from 'boxen';
 import chalk from 'chalk';
 import debug from 'debug';
-import Npm from 'silent-npm-registry-client';
-import pkg from '../package.json';
+import path from 'path';
 
 const log = debug('mup:updates');
+const SKIP_CHECK_UPDATE = process.env.MUP_SKIP_UPDATE_CHECK === 'true';
 
-export default function() {
-  log('checking for updates');
+function parseVersion(version) {
+  return flatMap(version.split('.'), n =>
+    n.split('-beta').filter(segment => segment.length > 0).map(Number)
+  );
+}
 
-  return new Promise(resolve => {
-    const params = {
-      timeout: 1000,
-      package: pkg.name,
-      auth: {}
-    };
-
-    const npm = new Npm();
-    const uri = 'https://registry.npmjs.org/npm';
-    npm.distTags.fetch(uri, params, (err, res) => {
-      if (err) {
-        resolve();
-
-        return;
+function newerStable(local, remote) {
+  for (let i = 0; i < 3; i++) {
+    for (let sameIndex = 0; sameIndex < i; sameIndex += 1) {
+      if (local[sameIndex] !== remote[sameIndex]) {
+        return false;
       }
+    }
 
-      let showStable = true;
+    if (local[i] < remote[i]) {
+      return true;
+    }
+  }
 
-      const npmVersion = res.latest;
-      const nextVersion = res.next;
+  return false;
+}
 
-      const local = pkg.version.split('.').slice(0, 3)
-        .map(n => Number(n.split('-')[0]));
-      const remote = npmVersion.split('.').map(n => Number(n.split('-')[0]));
-      const next = nextVersion.split('.').map(n => Number(n.split('-')[0]));
-      next.push(nextVersion.split('.')[2].split('beta')[1]);
+function compareVersions(local, remote, next) {
+  const beta = local.length > 3;
+  let isStable = true;
+  let available = newerStable(local, remote);
 
-      const beta = pkg.version.split('.')[2].split('-').length > 1;
+  if (beta && !available) {
+    // check if stable version for beta is available
+    available = isEqual(remote, local.slice(0, 3));
+  }
 
-      if (beta) {
-        local.push(pkg.version.split('.')[2].split('beta')[1]);
-      }
+  if (beta && !available) {
+    // check if newer beta is available
+    available = next[3] > local[3];
+    isStable = false;
+  }
 
-      let available = remote[0] > local[0] ||
-        remote[0] === local[0] && remote[1] > local[1] ||
-        remote[1] === local[1] && remote[2] > local[2];
+  return {
+    available,
+    isStable
+  };
+}
 
-      if (beta && !available) {
-        // check if stable for beta is available
-        available = remote[0] === local[0] &&
-          remote[1] === local[1] &&
-          remote[2] === local[2];
-      }
+function showUpdateOnExit(pkg, version, isStable) {
+  const command = isStable ? `npm i -g ${pkg.name}` : `npm i -g ${pkg.name}@next`;
+  let text = `Update available for ${pkg.name}`;
+  text += `\n${pkg.version} => ${version}`;
 
-      if (beta && !available) {
-        available = next[3] > local[3];
-        showStable = false;
-      }
+  text += `\nTo update, run ${chalk.green(command)}`;
 
+  process.on('exit', () => {
+    console.log(
+      boxen(text, {
+        padding: 1,
+        margin: 1,
+        align: 'center',
+        borderColor: 'yellow'
+      })
+    );
+  });
+}
+
+function checkPackageUpdates(name, pkg) {
+  log(`retrieving tags for ${name}`);
+
+  return axios.get(`https://registry.npmjs.org/-/package/${name}/dist-tags`)
+    .then(({ data }) => {
+      const npmVersion = data.latest || '0.0.0';
+      const nextVersion = data.next || '0.0.0';
+
+      const local = parseVersion(pkg.version);
+      const remote = parseVersion(npmVersion);
+      const next = parseVersion(nextVersion);
+
+      const {
+        available,
+        isStable
+      } = compareVersions(local, remote, next);
+
+      log(`finished update check for ${name}`);
       if (available) {
-        const version = showStable ? npmVersion : nextVersion;
-        const command = showStable ? 'npm i -g mup' : 'npm i -g mup@next';
-
-        let text = `update available ${pkg.version} => ${version}`;
-        text += `\nTo update, run ${chalk.green(command)}`;
-        console.log(
-          boxen(text, {
-            padding: 1,
-            margin: 1,
-            align: 'center',
-            borderColor: 'yellow'
-          })
-        );
+        showUpdateOnExit(pkg, isStable ? npmVersion : nextVersion, isStable);
       }
-
-      resolve();
+    }).catch(e => {
+      // It is okay if this fails
+      log(e);
     });
+}
+
+export default function(packages) {
+  log('checking for updates');
+  log('Packages: ', packages);
+
+  if (SKIP_CHECK_UPDATE) {
+    log('skipping update check');
+
+    return;
+  }
+
+  packages.forEach(({ name, path: packagePath }) => {
+    try {
+      const packageJsonPath = path.resolve(path.dirname(packagePath), 'package.json');
+      // eslint-disable-next-line global-require
+      const pkg = require(packageJsonPath);
+      checkPackageUpdates(name, pkg);
+    } catch (e) {
+      // It is okay if this fails
+      log(e);
+    }
   });
 }

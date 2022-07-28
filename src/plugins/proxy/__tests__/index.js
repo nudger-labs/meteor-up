@@ -13,28 +13,36 @@ sh.config.silent = false;
 
 describe('module - proxy', function() {
   this.timeout(60000000);
+  const serverInfo = servers.mymeteor;
+
+  before(async () => {
+    await runSSHCommand(
+      serverInfo,
+      'docker rm -f $(docker ps -a -q)'
+    );
+  });
 
   describe('setup', () => {
     it('should setup proxy on "meteor" vm', async () => {
-      const serverInfo = servers.mymeteor;
       sh.cd(path.resolve(os.tmpdir(), 'tests/project-3'));
       let out = sh.exec('mup setup');
 
       expect(out.code).to.equal(0);
-      expect(out.output).to.have.entriesCount('Setup proxy', 1);
-      expect(out.output).to.have.entriesCount('Start proxy: SUCCESS', 1);
+      expect(out.stdout).to.have.entriesCount('Setup proxy', 1);
+      expect(out.stdout).to.have.entriesCount('Start proxy: SUCCESS', 1);
 
-      out = await runSSHCommand(serverInfo, 'docker ps');
+      out = await runSSHCommand(serverInfo, 'sudo docker ps');
 
       expect(out.code).to.equal(0);
       expect(out.output).to.have.entriesCount('mup-nginx-proxy', 2);
       expect(out.output).to.have.entriesCount('mup-nginx-proxy-letsencrypt', 1);
 
       out = await runSSHCommand(serverInfo, 'du --max-depth=2 /opt');
-      expect(out.output).to.have.entriesCount('/opt/mup-nginx-proxy', 4);
+      expect(out.output).to.have.entriesCount('/opt/mup-nginx-proxy', 5);
       expect(out.output).to.have.entriesCount('/opt/mup-nginx-proxy/certs', 1);
       expect(out.output).to.have.entriesCount('/opt/mup-nginx-proxy/mounted-certs', 1);
       expect(out.output).to.have.entriesCount('/opt/mup-nginx-proxy/config', 1);
+      expect(out.output).to.have.entriesCount('/opt/mup-nginx-proxy/upstream', 1);
 
       out = await runSSHCommand(serverInfo, 'ls /opt/mup-nginx-proxy/config');
       expect(out.output).to.have.entriesCount('shared-config.sh', 1);
@@ -45,14 +53,13 @@ describe('module - proxy', function() {
 
   describe('reconfig-shared', () => {
     it('it should update shared settings', async () => {
-      const serverInfo = servers.mymeteor;
       sh.cd(path.resolve(os.tmpdir(), 'tests/project-3'));
       sh.exec('mup setup');
 
       let out = sh.exec('mup proxy reconfig-shared');
       expect(out.code).to.equal(0);
-      expect(out.output).to.have.entriesCount('Configuring Proxy\'s Shared Settings', 1);
-      expect(out.output).to.have.entriesCount('Start proxy: SUCCESS', 1);
+      expect(out.stdout).to.have.entriesCount('Configuring Proxy\'s Shared Settings', 1);
+      expect(out.stdout).to.have.entriesCount('Start proxy: SUCCESS', 1);
 
       out = await runSSHCommand(serverInfo, 'cat /opt/mup-nginx-proxy/config/shared-config.sh');
       expect(out.output).to.have.entriesCount('CLIENT_UPLOAD_LIMIT=10M', 1);
@@ -65,7 +72,12 @@ describe('module - proxy', function() {
       sh.exec('mup setup');
 
       const out = sh.exec('mup proxy logs --tail 2');
-      expect(out.output).to.have.entriesCount('Received event start for', 1);
+      if (out.stdout.indexOf('Received event start for') > -1) {
+        expect(out.stdout).to.have.entriesCount('Received event start for', 1);
+      } else {
+        expect(out.stdout).to.have.entriesCount('Generating DSA parameters', 1);
+      }
+
       expect(out.code).to.equal(0);
     });
   });

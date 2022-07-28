@@ -63,7 +63,12 @@ export const stop = {
 export const ssh = {
   name: 'ssh [server]',
   description: 'SSH into server',
-  handler: commandHandlers.ssh
+  handler: commandHandlers.ssh,
+  builder(yargs) {
+    yargs.positional('server', {
+      description: 'Name of server'
+    }).strict(false);
+  }
 };
 
 export const validate = {
@@ -82,5 +87,11 @@ export const validate = {
 
 export const status = {
   description: 'View status of your app, databases and other components',
-  handler: commandHandlers.status
+  handler: commandHandlers.status,
+  builder(yargs) {
+    return yargs.option('overview', {
+      description: 'Simplified report to quickly see the status of each component',
+      bool: true
+    });
+  }
 };

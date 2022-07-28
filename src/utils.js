@@ -1,7 +1,9 @@
-import { Client } from 'ssh2';
+import { Client } from 'ssh2-classic';
 import debug from 'debug';
 import expandTilde from 'expand-tilde';
 import fs from 'fs';
+import net from 'net';
+import nodemiral from '@zodern/nodemiral';
 import path from 'path';
 import { promisify } from 'bluebird';
 import readline from 'readline';
@@ -31,13 +33,23 @@ export function runTaskList(list, sessions, opts) {
     delete opts.verbose;
   }
 
+  if (opts && opts.showDuration) {
+    list._taskQueue.forEach(task => {
+      task.options = task.options || {};
+      task.options.showDuration = true;
+    });
+    delete opts.showDuration;
+  }
+
   return new Promise((resolve, reject) => {
     list.run(sessions, opts, summaryMap => {
       for (const host in summaryMap) {
         if (summaryMap.hasOwnProperty(host)) {
           const summary = summaryMap[host];
+
           if (summary.error) {
             const error = summary.error;
+
             error.nodemiralHistory = summary.history;
             reject(error);
 
@@ -72,6 +84,7 @@ class Callback2Stream extends stream.Readable {
     this.reading = true;
     this.data.forEach(() => {
       const shouldContinue = this.reading && this.push(this.data.shift());
+
       if (!shouldContinue) {
         this.reading = false;
       }
@@ -79,18 +92,19 @@ class Callback2Stream extends stream.Readable {
   }
 }
 
-export function getDockerLogs(name, sessions, args) {
+export function getDockerLogs(name, sessions, args, showHost = true) {
   const command = `sudo docker ${args.join(' ')} ${name} 2>&1`;
 
   log(`getDockerLogs command: ${command}`);
 
   const promises = sessions.map(session => {
     const input = new Callback2Stream();
-    const host = `[${session._host}]`;
+    const host = showHost ? `[${session._host}]` : '';
     const lineSeperator = readline.createInterface({
       input,
       terminal: true
     });
+
     lineSeperator.on('line', data => {
       console.log(host + data);
     });
@@ -129,27 +143,58 @@ export function createSSHOptions(server) {
   return ssh;
 }
 
-// Maybe we should create a new npm package
-// for this one. Something like 'sshelljs'.
-export function runSSHCommand(info, command) {
+function runSessionCommand(session, command) {
   return new Promise((resolve, reject) => {
+    let client;
+    let done;
+
+    // callback is called synchronously
+    session._withSshClient((_client, _done) => {
+      client = _client;
+      done = _done;
+    });
+
+    let output = '';
+
+    client.execute(
+      command,
+      {
+        onStderr: data => {
+          output += data;
+        },
+        onStdout: data => {
+          output += data;
+        }
+      },
+      (err, result) => {
+        // eslint-disable-next-line callback-return
+        done();
+
+        if (err) {
+          return reject(err);
+        }
+
+        resolve({
+          code: result.code,
+          output,
+          host: session._host
+        });
+      }
+    );
+  });
+}
+
+// info can either be an object from the server object in the config
+// or it can be a nodemiral session
+export function runSSHCommand(info, command) {
+  if (info instanceof nodemiral.session) {
+    return runSessionCommand(info, command);
+  }
+
+  return new Promise((resolve, reject) => {
+    const ssh = createSSHOptions(info);
     const conn = new Client();
 
-    // TODO better if we can extract SSH agent info from original session
-    const sshAgent = process.env.SSH_AUTH_SOCK;
-    const ssh = {
-      host: info.host,
-      port: (info.opts && info.opts.port) || 22,
-      username: info.username
-    };
-
-    if (info.pem) {
-      ssh.privateKey = fs.readFileSync(resolvePath(info.pem), 'utf8');
-    } else if (info.password) {
-      ssh.password = info.password;
-    } else if (sshAgent && fs.existsSync(sshAgent)) {
-      ssh.agent = sshAgent;
-    }
     conn.connect(ssh);
 
     conn.once('error', err => {
@@ -174,6 +219,10 @@ export function runSSHCommand(info, command) {
           output += data;
         });
 
+        outputStream.stderr.on('data', data => {
+          output += data;
+        });
+
         outputStream.once('close', code => {
           conn.end();
           resolve({ code, output, host: info.host });
@@ -183,7 +232,47 @@ export function runSSHCommand(info, command) {
   });
 }
 
-export function countOccurences(needle, haystack) {
+export function forwardPort({
+  server,
+  localAddress,
+  localPort,
+  remoteAddress,
+  remotePort,
+  onReady,
+  onError,
+  onConnection = () => {}
+}) {
+  const sshOptions = createSSHOptions(server);
+  const netServer = net.createServer(netConnection => {
+    const sshConnection = new Client();
+    sshConnection.on('ready', () => {
+      sshConnection.forwardOut(
+        localAddress,
+        localPort,
+        remoteAddress,
+        remotePort,
+        (err, sshStream) => {
+          if (err) {
+            return onError(err);
+          }
+          onConnection();
+          netConnection.pipe(sshStream);
+          sshStream.pipe(netConnection);
+        }
+      );
+    }).connect(sshOptions);
+  });
+
+  netServer.listen(localPort, localAddress, error => {
+    if (error) {
+      onError(error);
+    } else {
+      onReady();
+    }
+  });
+}
+
+export function countOccurrences(needle, haystack) {
   const regex = new RegExp(needle, 'g');
   const match = haystack.match(regex) || [];
 
@@ -197,16 +286,17 @@ export function resolvePath(...paths) {
 }
 
 /**
- * Checks if the module not found is a certain module
+ * Checks if the module not found by `require` is a certain module
  *
- * @param {Error} e - Error that was thwon
+ * @param {Error} e - Error that was thrown
  * @param {String} modulePath - path to the module to compare the error to
  * @returns {Boolean} true if the modulePath and path in the error is the same
  */
 export function moduleNotFoundIsPath(e, modulePath) {
-  const pathPosition = e.message.length - modulePath.length - 1;
+  const message = e.message.split('\n')[0];
+  const pathPosition = message.length - modulePath.length - 1;
 
-  return e.message.indexOf(modulePath) === pathPosition;
+  return message.indexOf(modulePath) === pathPosition;
 }
 
 export function argvContains(argvArray, option) {

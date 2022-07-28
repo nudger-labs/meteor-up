@@ -23,7 +23,18 @@ export const stop = {
   handler: commandHandlers.stop
 };
 
+export const shell = {
+  description: 'Open MongoDB shell on the server',
+  handler: commandHandlers.shell
+};
+
 export const status = {
   description: 'View MongoDB status',
-  handler: commandHandlers.status
+  handler: commandHandlers.status,
+  builder(yargs) {
+    return yargs.option('overview', {
+      description: 'Simplified report to quickly see the status of mongo',
+      bool: true
+    });
+  }
 };

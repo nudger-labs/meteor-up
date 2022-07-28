@@ -1,7 +1,7 @@
 import * as utils from '../utils';
 import assert from 'assert';
 import { expect } from 'chai';
-import nodemiral from 'nodemiral';
+import nodemiral from '@zodern/nodemiral';
 import path from 'path';
 
 describe('utils', () => {
@@ -35,7 +35,7 @@ describe('utils', () => {
         }
       };
 
-      utils.runTaskList(list, {}, {verbose: true})
+      utils.runTaskList(list, {}, { verbose: true })
         .then(() => { cb(); });
     });
 
@@ -56,11 +56,11 @@ describe('utils', () => {
     });
   });
 
-  describe('countOccurences', () => {
+  describe('countOccurrences', () => {
     it('should return the correct count', () => {
       const needle = 'Meteor';
       const haystack = 'Production Quality Meteor Deployments. Meteor Up is a command line tool that allows you to deploy any Meteor app to your own server.';
-      const count = utils.countOccurences(needle, haystack);
+      const count = utils.countOccurrences(needle, haystack);
       assert(count === 3);
     });
   });
@@ -118,7 +118,7 @@ describe('utils', () => {
       expect(result).to.deep.equal(['logs', '--tail']);
     });
     it('should remove undefined and false options', () => {
-      const argv = { _: ['logs'], config: undefined, verbose: true, follow: false};
+      const argv = { _: ['logs'], config: undefined, verbose: true, follow: false };
       const argvArray = ['mup', 'logs', '--verbose'];
       const unwanted = ['_'];
 
