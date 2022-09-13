@@ -57,6 +57,7 @@ export function setup(api) {
     dest: '/opt/mongodb/mongo-start-new.sh',
     vars: {
       mongoVersion: mongoConfig.version,
+      mongoBindIp: mongoConfig.version,
       mongoDbDir: '/var/lib/mongodb'
     }
   });
