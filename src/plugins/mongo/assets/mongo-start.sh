@@ -27,4 +27,3 @@ else
   cp mongo-start-new.sh mongo-start-current.sh
   bash mongo-start-current.sh
 fi
-
