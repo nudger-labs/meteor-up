@@ -58,6 +58,7 @@ export function setup(api) {
     vars: {
       mongoVersion: mongoConfig.version,
       mongoBindIp: mongoConfig.bindIp,
+      mongoReplicaSetName: mongoConfig.replicaSetName,
       mongoDbDir: '/var/lib/mongodb'
     }
   });
@@ -179,6 +180,7 @@ export async function status(api) {
 
   const mongoVersion = mongoStatus.version;
   const mongoBindIp = mongoStatus.bindIp;
+  const mongoReplicaSetName = mongoStatus.replicaSetName;
   const connections = mongoStatus.connections.current;
   const storageEngine = mongoStatus.storageEngine.name;
 

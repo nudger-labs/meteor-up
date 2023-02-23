@@ -3,7 +3,7 @@ set -e
 
 cat <<-CONFIG_EOT > /opt/mongodb/mongodb.conf
 dbpath=/data/db
-replSet=meteor
+replSet=<%= mongoReplicaSetName %>
 CONFIG_EOT
 
 MONGO_VERSION=<%= mongoVersion %>
@@ -21,7 +21,7 @@ sudo docker rm -f mongodb
 
 set -e
 
-echo "Running mongo:<%= mongoVersion %> on <%= mongoBindIp %>"
+echo "Running mongo:<%= mongoVersion %>:<%= mongoReplicaSetName %> on <%= mongoBindIp %>"
 
 sudo docker run \
   -d \
