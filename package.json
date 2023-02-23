@@ -1,6 +1,6 @@
 {
   "name": "@nudger-labs/mup",
-  "version": "1.6.4",
+  "version": "1.6.5",
   "description": "Production Quality Meteor Deployments",
   "main": "lib/index.js",
   "repository": {
