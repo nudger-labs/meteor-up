@@ -7,6 +7,7 @@ const schema = joi.object().keys({
   oplog: joi.bool(),
   port: joi.number(),
   dbName: joi.string(),
+  replicaSetName: joi.string(),
   version: joi.string(),
   bindIp: joi.string(),
   servers: joi.object().keys().required()
