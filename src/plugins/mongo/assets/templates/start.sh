@@ -8,7 +8,7 @@ CONFIG_EOT
 
 MONGO_VERSION=<%= mongoVersion %>
 MONGO_BINDIP=<%= mongoBindIp %>
-sudo mkdir -p <%= mongoDbDir %>
+sudo mkdir -p <%= mongoDbVolume %>
 
 set -e
 sudo docker pull mongo:$MONGO_VERSION
@@ -21,13 +21,13 @@ sudo docker rm -f mongodb
 
 set -e
 
-echo "Running mongo:<%= mongoVersion %>:<%= mongoReplicaSetName %> on <%= mongoBindIp %>"
+echo "Running mongo:<%= mongoVersion %>:<%= mongoReplicaSetName %> on <%= mongoBindIp %> at <%= mongoDbVolume %>"
 
 sudo docker run \
   -d \
   --restart=unless-stopped \
   --publish=<%= mongoBindIp %>:27017:27017 \
-  --volume=<%= mongoDbDir %>:/data/db \
+  --volume=<%= mongoDbVolume %>:/data/db \
   --volume=/opt/mongodb/mongodb.conf:/mongodb.conf \
   --log-opt max-size=100m \
   --log-opt max-file=7 \

@@ -10,6 +10,7 @@ const schema = joi.object().keys({
   replicaSetName: joi.string(),
   version: joi.string(),
   bindIp: joi.string(),
+  dbVolume: joi.string(),
   servers: joi.object().keys().required()
 });
 

@@ -59,7 +59,7 @@ export function setup(api) {
       mongoVersion: mongoConfig.version,
       mongoBindIp: mongoConfig.bindIp,
       mongoReplicaSetName: mongoConfig.replicaSetName,
-      mongoDbDir: '/var/lib/mongodb'
+      dbVolume: mongoConfig.dbVolume || '/var/lib/mongodb'
     }
   });
 
@@ -181,6 +181,7 @@ export async function status(api) {
   const mongoVersion = mongoStatus.version;
   const mongoBindIp = mongoStatus.bindIp;
   const mongoReplicaSetName = mongoStatus.replicaSetName;
+  const mongoDbVolume = mongoStatus.dbVolume;
   const connections = mongoStatus.connections.current;
   const storageEngine = mongoStatus.storageEngine.name;
 
@@ -211,7 +212,8 @@ export async function status(api) {
   display.addLine(`Restarted ${restartCount} times`, restartCountColor);
   display.addLine(`Running since ${createdTime}`);
   display.addLine(`Version ${mongoVersion}`);
-  display.addLine(`BindIP ${mongoVersion}`);
+  display.addLine(`BindIP ${ mongoBindIp }`);
+  display.addLine(`DB Volume ${ mongoDbVolume }`);
   display.addLine(`Connections: ${connections}`);
   display.addLine(`Storage Engine: ${storageEngine}`);
   display.show(api.getOptions().overview);
