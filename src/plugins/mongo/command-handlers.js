@@ -59,7 +59,7 @@ export function setup(api) {
       mongoVersion: mongoConfig.version,
       mongoBindIp: mongoConfig.bindIp,
       mongoReplicaSetName: mongoConfig.replicaSetName,
-      dbVolume: mongoConfig.dbVolume || '/var/lib/mongodb'
+      mongoDbVolume: mongoConfig.dbVolume || '/var/lib/mongodb'
     }
   });
 
