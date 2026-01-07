@@ -140,6 +140,22 @@ export function createSSHOptions(server) {
     ssh.agent = sshAgent;
   }
 
+  // Support modern SSH servers (OpenSSH 8.8+) while maintaining backward compatibility
+  // Note: ssh2-classic v0.8 doesn't support rsa-sha2-512/256, so we prioritize
+  // modern key types (ed25519, ecdsa) and fall back to ssh-rsa for compatibility
+  if (!ssh.algorithms) {
+    ssh.algorithms = {
+      serverHostKey: [
+        'ssh-ed25519',
+        'ecdsa-sha2-nistp256',
+        'ecdsa-sha2-nistp384',
+        'ecdsa-sha2-nistp521',
+        'ssh-rsa',
+        'ssh-dss'
+      ]
+    };
+  }
+
   return ssh;
 }
 

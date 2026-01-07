@@ -13,7 +13,8 @@ const schema = joi.object().keys({
         [joi.string(), joi.number(), joi.bool()]
       ),
       bind: joi.string(),
-      settings: joi.string()
+      settings: joi.string(),
+      numberOfInstances: joi.number().min(1).max(10)
     })
   ),
   deployCheckWaitTime: joi.number(),

@@ -298,6 +298,7 @@ export function envconfig(api) {
     if (app.servers[serverName].env && app.servers[serverName].env.PORT) {
       vars.port = app.servers[serverName].env.PORT;
     }
+    vars.numberOfInstances = app.servers[serverName].numberOfInstances || 1;
     startHostVars[host] = vars;
   });
 
@@ -310,7 +311,8 @@ export function envconfig(api) {
     vars: {
       imagePrefix: getImagePrefix(privateDockerRegistry),
       appName: app.name,
-      port: app.env.PORT || 80,
+      // When using proxy, use docker.imagePort to avoid port 80 conflict with nginx
+      port: app.env.PORT || (proxy ? (app.docker.imagePort || 3000) : 80),
       bind: bindAddress,
       sslConfig: app.ssl,
       logConfig: app.log,
@@ -318,7 +320,8 @@ export function envconfig(api) {
       docker: app.docker,
       proxyConfig: proxy,
       nginxClientUploadLimit: app.nginx.clientUploadLimit || '10M',
-      privateRegistry: privateDockerRegistry
+      privateRegistry: privateDockerRegistry,
+      numberOfInstances: 1
     }
   });
 
@@ -436,10 +439,20 @@ export async function stop(api) {
       name: config.name
     });
   } else {
+    const stopHostVars = {};
+    Object.keys(config.servers).forEach(serverName => {
+      const host = api.getConfig().servers[serverName].host;
+      stopHostVars[host] = {
+        numberOfInstances: config.servers[serverName].numberOfInstances || 1
+      };
+    });
+    
     list.executeScript('Stop Meteor', {
       script: api.resolvePath(__dirname, 'assets/meteor-stop.sh'),
+      hostVars: stopHostVars,
       vars: {
-        appName: config.name
+        appName: config.name,
+        numberOfInstances: 1
       }
     });
   }
@@ -459,10 +472,20 @@ export async function restart(api) {
   if (api.swarmEnabled()) {
     api.tasks.addRestartService(list, { name: appConfig.name });
   } else {
+    const stopHostVars = {};
+    Object.keys(appConfig.servers).forEach(serverName => {
+      const host = api.getConfig().servers[serverName].host;
+      stopHostVars[host] = {
+        numberOfInstances: appConfig.servers[serverName].numberOfInstances || 1
+      };
+    });
+    
     list.executeScript('Stop Meteor', {
       script: api.resolvePath(__dirname, 'assets/meteor-stop.sh'),
+      hostVars: stopHostVars,
       vars: {
-        appName: appConfig.name
+        appName: appConfig.name,
+        numberOfInstances: 1
       }
     });
     addStartAppTask(list, api);
@@ -600,10 +623,20 @@ export async function destroy(api) {
     process.exit(1);
   }
 
+  const stopHostVars = {};
+  Object.keys(config.app.servers).forEach(serverName => {
+    const host = config.servers[serverName].host;
+    stopHostVars[host] = {
+      numberOfInstances: config.app.servers[serverName].numberOfInstances || 1
+    };
+  });
+  
   list.executeScript('Stop App', {
     script: api.resolvePath(__dirname, 'assets/meteor-stop.sh'),
+    hostVars: stopHostVars,
     vars: {
-      appName: config.app.name
+      appName: config.app.name,
+      numberOfInstances: 1
     }
   });
 

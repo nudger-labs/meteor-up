@@ -1,4 +1,4 @@
-import { addProxyEnv, getLoadBalancingHosts, getSessions } from './utils';
+import { addProxyEnv, getLoadBalancingHosts, getLocalInstanceHostnames, getSessions } from './utils';
 import chalk from 'chalk';
 import { clone } from 'lodash';
 import debug from 'debug';
@@ -148,17 +148,46 @@ export function setup(api) {
     serverConfig,
     Object.keys(appConfig.servers)
   );
+  
+  // Build list of all instances across all servers
+  const instances = [];
+  Object.keys(appConfig.servers).forEach((serverName, serverIndex) => {
+    const numberOfInstances = appConfig.servers[serverName].numberOfInstances || 1;
+    // Use docker.imagePort as base since app.env.PORT is stripped when using proxy
+    const basePort = appConfig.docker.imagePort || 3000;
+    
+    // When using multiple instances, nginx needs to connect via Docker bridge gateway
+    // since the app containers publish ports to the host
+    const serverHost = numberOfInstances > 1 
+      ? '172.17.0.1'  // Docker bridge gateway IP
+      : (serverConfig[serverName].privateIp || serverConfig[serverName].host);
+    
+    for (let i = 1; i <= numberOfInstances; i++) {
+      const instanceName = i === 1 ? appName : `${appName}-${i}`;
+      instances.push({
+        host: serverHost,
+        port: basePort + i - 1,     // Use consecutive host ports
+        name: instanceName
+      });
+    }
+  });
+  
+  const hasMultipleInstances = instances.length > Object.keys(appConfig.servers).length;
 
   list.executeScript('Configure Nginx Upstream', {
     script: api.resolvePath(__dirname, 'assets/upstream.sh'),
     vars: {
       domains,
       name: appName,
-      setUpstream: !api.swarmEnabled() && config.loadBalancing,
+      setUpstream: !api.swarmEnabled() && (config.loadBalancing || hasMultipleInstances),
       stickySessions: config.stickySessions !== false,
+      stickySessionMethod: config.stickySessionMethod || 'ip_hash',
+      stickySessionCookie: config.stickySessionCookie || 'meteor_login_token',
       proxyName: PROXY_CONTAINER_NAME,
       port: appConfig.env.PORT,
-      hostnames
+      hostnames,
+      instances,
+      useInstances: hasMultipleInstances
     }
   });
 

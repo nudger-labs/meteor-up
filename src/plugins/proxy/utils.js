@@ -49,3 +49,14 @@ export function getLoadBalancingHosts(serverConfig, serverNames) {
     serverConfig[name].privateIp || serverConfig[name].host
   );
 }
+
+export function getLocalInstanceHostnames(appName, numberOfInstances, host) {
+  const instances = [];
+  for (let i = 1; i <= numberOfInstances; i++) {
+    instances.push({
+      name: i === 1 ? appName : `${appName}-${i}`,
+      host: host
+    });
+  }
+  return instances;
+}

@@ -14,6 +14,7 @@ IMAGE=<% if(docker.remoteImage){ %><%= docker.remoteImage %>
   <% } else { %>$APP_IMAGE:latest <% } %>
 VOLUME="--volume=$BUNDLE_PATH:/bundle"
 LOCAL_IMAGE=false
+NUMBER_OF_INSTANCES=<%= numberOfInstances %>
 
 <% if (!privateRegistry) { %>
 # sudo docker image inspect $IMAGE >/dev/null || IMAGE=<%= docker.image %>
@@ -37,14 +38,22 @@ echo "Volume" $VOLUME
 # We want this message with the errors in stderr when shown to the user.
 >&2 echo "Removing docker containers. Errors about nonexistent endpoints and containers are normal.";
 
-# Remove previous version of the app, if exists
-sudo docker rm -f $APPNAME
-
-# Remove container network if still exists
-sudo docker network disconnect bridge -f $APPNAME
-<% for(var network in docker.networks) { %>
-sudo docker network disconnect <%=  docker.networks[network] %> -f $APPNAME
-<% } %>
+# Remove previous version of the app instances, if exists
+for i in $(seq 1 $NUMBER_OF_INSTANCES); do
+  if [ $i -eq 1 ]; then
+    INSTANCE_NAME=$APPNAME
+  else
+    INSTANCE_NAME=$APPNAME-$i
+  fi
+  
+  sudo docker rm -f $INSTANCE_NAME
+  
+  # Remove container network if still exists
+  sudo docker network disconnect bridge -f $INSTANCE_NAME
+  <% for(var network in docker.networks) { %>
+  sudo docker network disconnect <%=  docker.networks[network] %> -f $INSTANCE_NAME
+  <% } %>
+done
 
 # Remove frontend container if exists
 sudo docker rm -f $APPNAME-frontend
@@ -70,30 +79,43 @@ else
   set -e
 fi
 
-sudo docker run \
-  -d \
-  --restart=always \
-  $VOLUME \
-  <% if((sslConfig && typeof sslConfig.autogenerate === "object") || (typeof proxyConfig === "object" && !proxyConfig.loadBalancing))  { %> \
-  --expose=<%= docker.imagePort %> \
-  <% } else { %> \
-  --publish=$BIND:$PORT:<%= docker.imagePort %> \
-  <% } %> \
-  --hostname="$HOSTNAME-$APPNAME" \
-  --env-file=$ENV_FILE \
-  <% if(logConfig && logConfig.driver)  { %>--log-driver=<%= logConfig.driver %> <% } %> \
-  <% for(var option in logConfig.opts) { %>--log-opt <%= option %>=<%= logConfig.opts[option] %> <% } %> \
-  <% for(var volume in volumes) { %>-v <%= volume %>:<%= volumes[volume] %> <% } %> \
-  <% for(var args in docker.args) { %> <%- docker.args[args] %> <% } %> \
-  <% if(sslConfig && typeof sslConfig.autogenerate === "object")  { %> \
-    -e "VIRTUAL_HOST=<%= sslConfig.autogenerate.domains %>" \
-    -e "LETSENCRYPT_HOST=<%= sslConfig.autogenerate.domains %>" \
-    -e "LETSENCRYPT_EMAIL=<%= sslConfig.autogenerate.email %>" \
-    -e "HTTPS_METHOD=noredirect" \
-  <% } %> \
-  --name=$APPNAME \
-  $IMAGE
-echo "Ran" $IMAGE
+# Start multiple instances
+for i in $(seq 1 $NUMBER_OF_INSTANCES); do
+  if [ $i -eq 1 ]; then
+    INSTANCE_NAME=$APPNAME
+    INSTANCE_PORT=$PORT
+  else
+    INSTANCE_NAME=$APPNAME-$i
+    INSTANCE_PORT=$((PORT + i - 1))
+  fi
+  
+  echo "Starting instance $INSTANCE_NAME on port $INSTANCE_PORT"
+  
+  sudo docker run \
+    -d \
+    --restart=always \
+    $VOLUME \
+    <% if((sslConfig && typeof sslConfig.autogenerate === "object") || (typeof proxyConfig === "object" && !proxyConfig.loadBalancing && numberOfInstances == 1))  { %> \
+    --expose=<%= docker.imagePort %> \
+    <% } else { %> \
+    --publish=$BIND:$INSTANCE_PORT:<%= docker.imagePort %> \
+    <% } %> \
+    --hostname="$HOSTNAME-$INSTANCE_NAME" \
+    --env-file=$ENV_FILE \
+    <% if(logConfig && logConfig.driver)  { %>--log-driver=<%= logConfig.driver %> <% } %> \
+    <% for(var option in logConfig.opts) { %>--log-opt <%= option %>=<%= logConfig.opts[option] %> <% } %> \
+    <% for(var volume in volumes) { %>-v <%= volume %>:<%= volumes[volume] %> <% } %> \
+    <% for(var args in docker.args) { %> <%- docker.args[args] %> <% } %> \
+    <% if(sslConfig && typeof sslConfig.autogenerate === "object")  { %> \
+      -e "VIRTUAL_HOST=<%= sslConfig.autogenerate.domains %>" \
+      -e "LETSENCRYPT_HOST=<%= sslConfig.autogenerate.domains %>" \
+      -e "LETSENCRYPT_EMAIL=<%= sslConfig.autogenerate.email %>" \
+      -e "HTTPS_METHOD=noredirect" \
+    <% } %> \
+    --name=$INSTANCE_NAME \
+    $IMAGE
+  echo "Ran instance $INSTANCE_NAME"
+done
 # When using a private docker registry, the cleanup run in 
 # Prepare Bundle is only done on one server, so we also
 # cleanup here so the other servers don't run out of disk space
@@ -167,5 +189,12 @@ EOT
 <% } %>
 
 <% for(var network in docker.networks) { %>
-  sudo docker network connect <%=  docker.networks[network] %> $APPNAME
+  for i in $(seq 1 $NUMBER_OF_INSTANCES); do
+    if [ $i -eq 1 ]; then
+      INSTANCE_NAME=$APPNAME
+    else
+      INSTANCE_NAME=$APPNAME-$i
+    fi
+    sudo docker network connect <%=  docker.networks[network] %> $INSTANCE_NAME
+  done
 <% } %>

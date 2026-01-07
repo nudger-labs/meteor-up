@@ -19,6 +19,8 @@ const schema = joi.object().keys({
   servers: joi.object(),
   loadBalancing: joi.bool(),
   stickySessions: joi.bool(),
+  stickySessionMethod: joi.string().valid('ip_hash', 'cookie', 'none').default('ip_hash'),
+  stickySessionCookie: joi.string().default('meteor_login_token'),
   shared: joi.object().keys({
     clientUploadLimit: joi.alternatives().try(joi.number(), joi.string()),
     httpPort: joi.number(),

@@ -455,6 +455,22 @@ export default class PluginAPI {
       opts.ssh.keepaliveInterval = opts.ssh.keepaliveInterval || 1000 * 28;
       opts.ssh.keepaliveCountMax = opts.ssh.keepaliveCountMax || 12;
 
+      // Support modern SSH servers (OpenSSH 8.8+) while maintaining backward compatibility
+      // Note: ssh2-classic v0.8 doesn't support rsa-sha2-512/256, so we prioritize
+      // modern key types (ed25519, ecdsa) and fall back to ssh-rsa for compatibility
+      if (!opts.ssh.algorithms) {
+        opts.ssh.algorithms = {
+          serverHostKey: [
+            'ssh-ed25519',
+            'ecdsa-sha2-nistp256',
+            'ecdsa-sha2-nistp384',
+            'ecdsa-sha2-nistp521',
+            'ssh-rsa',
+            'ssh-dss'
+          ]
+        };
+      }
+
       if (info.pem) {
         try {
           auth.pem = fs.readFileSync(resolvePath(info.pem), 'utf8');
