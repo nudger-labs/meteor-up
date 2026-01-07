@@ -1,4 +1,4 @@
-import { Client } from 'ssh2-classic';
+import { Client } from 'ssh2';
 import debug from 'debug';
 import expandTilde from 'expand-tilde';
 import fs from 'fs';
@@ -141,8 +141,7 @@ export function createSSHOptions(server) {
   }
 
   // Support modern SSH servers (OpenSSH 8.8+) while maintaining backward compatibility
-  // Note: ssh2-classic v0.8 doesn't support rsa-sha2-512/256, so we prioritize
-  // modern key types (ed25519, ecdsa) and fall back to ssh-rsa for compatibility
+  // Prioritize modern key types and RSA SHA-2 signatures over deprecated ssh-rsa (SHA-1)
   if (!ssh.algorithms) {
     ssh.algorithms = {
       serverHostKey: [
@@ -150,6 +149,8 @@ export function createSSHOptions(server) {
         'ecdsa-sha2-nistp256',
         'ecdsa-sha2-nistp384',
         'ecdsa-sha2-nistp521',
+        'rsa-sha2-512',
+        'rsa-sha2-256',
         'ssh-rsa',
         'ssh-dss'
       ]

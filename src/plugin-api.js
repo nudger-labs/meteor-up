@@ -456,8 +456,7 @@ export default class PluginAPI {
       opts.ssh.keepaliveCountMax = opts.ssh.keepaliveCountMax || 12;
 
       // Support modern SSH servers (OpenSSH 8.8+) while maintaining backward compatibility
-      // Note: ssh2-classic v0.8 doesn't support rsa-sha2-512/256, so we prioritize
-      // modern key types (ed25519, ecdsa) and fall back to ssh-rsa for compatibility
+      // Prioritize modern key types and RSA SHA-2 signatures over deprecated ssh-rsa (SHA-1)
       if (!opts.ssh.algorithms) {
         opts.ssh.algorithms = {
           serverHostKey: [
@@ -465,6 +464,8 @@ export default class PluginAPI {
             'ecdsa-sha2-nistp256',
             'ecdsa-sha2-nistp384',
             'ecdsa-sha2-nistp521',
+            'rsa-sha2-512',
+            'rsa-sha2-256',
             'ssh-rsa',
             'ssh-dss'
           ]

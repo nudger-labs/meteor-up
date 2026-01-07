@@ -70,7 +70,7 @@
   },
   "dependencies": {
     "@hapi/joi": "^15.1.1",
-    "@zodern/nodemiral": "^1.4.1",
+    "@zodern/nodemiral": "^2.0.0-beta.1",
     "axios": "^0.21.4",
     "bluebird": "^3.7.2",
     "boxen": "^4.2.0",
@@ -86,7 +86,7 @@
     "rimraf": "^3.0.2",
     "shell-escape": "^0.2.0",
     "shelljs": "^0.8.5",
-    "ssh2-classic": "^0.8.10",
+    "ssh2": "^1.17.0",
     "tar": "^6.1.11",
     "traverse": "^0.6.6",
     "uuid": "^7.0.3",
