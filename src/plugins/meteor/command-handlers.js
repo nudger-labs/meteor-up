@@ -23,7 +23,8 @@ const log = debug('mup:module:meteor');
 export async function logs(api) {
   log('exec => mup meteor logs');
   const {
-    app
+    app,
+    servers
   } = api.getConfig();
   const swarmEnabled = api.swarmEnabled();
 
@@ -42,6 +43,36 @@ export async function logs(api) {
   }
 
   const sessions = await getSessions(api);
+
+  // Check if we have multiple instances on any server
+  let hasMultipleInstances = false;
+  Object.keys(app.servers).forEach(serverName => {
+    const numberOfInstances = app.servers[serverName].numberOfInstances || 1;
+    if (numberOfInstances > 1) {
+      hasMultipleInstances = true;
+    }
+  });
+
+  // If we have multiple instances, show logs from all of them
+  if (hasMultipleInstances && !swarmEnabled) {
+    const promises = [];
+    
+    // For each server, get logs from all instances
+    Object.keys(app.servers).forEach(serverName => {
+      const numberOfInstances = app.servers[serverName].numberOfInstances || 1;
+      const serverSession = sessions.find(s => s._host === servers[serverName].host);
+      
+      if (serverSession) {
+        for (let i = 1; i <= numberOfInstances; i++) {
+          const instanceName = i === 1 ? app.name : `${app.name}-${i}`;
+          console.log(`\n=== Logs from ${serverName} - ${instanceName} ===`);
+          promises.push(api.getDockerLogs(instanceName, [serverSession], args, true));
+        }
+      }
+    });
+
+    return Promise.all(promises);
+  }
 
   return api.getDockerLogs(app.name, sessions, args, !swarmEnabled);
 }
@@ -304,6 +335,8 @@ export function envconfig(api) {
 
   const list = nodemiral.taskList('Configuring App');
 
+  const multiServer = Object.keys(app.servers).length > 1;
+
   list.copy('Pushing the Startup Script', {
     src: api.resolvePath(__dirname, 'assets/templates/start.sh'),
     dest: `/opt/${app.name}/config/start.sh`,
@@ -321,7 +354,8 @@ export function envconfig(api) {
       proxyConfig: proxy,
       nginxClientUploadLimit: app.nginx.clientUploadLimit || '10M',
       privateRegistry: privateDockerRegistry,
-      numberOfInstances: 1
+      numberOfInstances: 1,
+      multiServer: multiServer
     }
   });
 

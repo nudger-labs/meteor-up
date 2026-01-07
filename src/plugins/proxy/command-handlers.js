@@ -151,16 +151,27 @@ export function setup(api) {
   
   // Build list of all instances across all servers
   const instances = [];
+  const serverCount = Object.keys(appConfig.servers).length;
+  
   Object.keys(appConfig.servers).forEach((serverName, serverIndex) => {
     const numberOfInstances = appConfig.servers[serverName].numberOfInstances || 1;
     // Use docker.imagePort as base since app.env.PORT is stripped when using proxy
     const basePort = appConfig.docker.imagePort || 3000;
     
-    // When using multiple instances, nginx needs to connect via Docker bridge gateway
-    // since the app containers publish ports to the host
-    const serverHost = numberOfInstances > 1 
-      ? '172.17.0.1'  // Docker bridge gateway IP
-      : (serverConfig[serverName].privateIp || serverConfig[serverName].host);
+    // Determine the host to use for this server's instances:
+    // - Multi-server deployment: Use privateIp/host so nginx can reach across servers
+    // - Single server with multiple instances: Use Docker bridge gateway (172.17.0.1)
+    let serverHost;
+    if (serverCount > 1) {
+      // Multi-server: use privateIp or host for cross-server communication
+      serverHost = serverConfig[serverName].privateIp || serverConfig[serverName].host;
+    } else if (numberOfInstances > 1) {
+      // Single server, multiple instances: use Docker bridge gateway
+      serverHost = '172.17.0.1';
+    } else {
+      // Single server, single instance: use privateIp or host
+      serverHost = serverConfig[serverName].privateIp || serverConfig[serverName].host;
+    }
     
     for (let i = 1; i <= numberOfInstances; i++) {
       const instanceName = i === 1 ? appName : `${appName}-${i}`;

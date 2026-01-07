@@ -91,19 +91,34 @@ for i in $(seq 1 $NUMBER_OF_INSTANCES); do
   
   echo "Starting instance $INSTANCE_NAME on port $INSTANCE_PORT"
   
+  # Build log options with instance-specific tag
+  LOG_OPTS=""
+  <% if(logConfig && logConfig.driver)  { %>LOG_OPTS="$LOG_OPTS --log-driver=<%= logConfig.driver %>"<% } %>
+  <% for(var option in logConfig.opts) { %>
+  <% if(option === 'tag') { %>
+  # Append instance number to tag for multi-instance deployments
+  if [ $i -eq 1 ] && [ $NUMBER_OF_INSTANCES -eq 1 ]; then
+    LOG_OPTS="$LOG_OPTS --log-opt <%= option %>=<%= logConfig.opts[option] %>"
+  else
+    LOG_OPTS="$LOG_OPTS --log-opt <%= option %>=<%= logConfig.opts[option] %>-$i"
+  fi
+  <% } else { %>
+  LOG_OPTS="$LOG_OPTS --log-opt <%= option %>=<%= logConfig.opts[option] %>"
+  <% } %>
+  <% } %>
+
   sudo docker run \
     -d \
     --restart=always \
     $VOLUME \
-    <% if((sslConfig && typeof sslConfig.autogenerate === "object") || (typeof proxyConfig === "object" && !proxyConfig.loadBalancing && numberOfInstances == 1))  { %> \
+    <% if((sslConfig && typeof sslConfig.autogenerate === "object") || (typeof proxyConfig === "object" && !proxyConfig.loadBalancing && numberOfInstances == 1 && !multiServer))  { %> \
     --expose=<%= docker.imagePort %> \
     <% } else { %> \
     --publish=$BIND:$INSTANCE_PORT:<%= docker.imagePort %> \
     <% } %> \
     --hostname="$HOSTNAME-$INSTANCE_NAME" \
     --env-file=$ENV_FILE \
-    <% if(logConfig && logConfig.driver)  { %>--log-driver=<%= logConfig.driver %> <% } %> \
-    <% for(var option in logConfig.opts) { %>--log-opt <%= option %>=<%= logConfig.opts[option] %> <% } %> \
+    $LOG_OPTS \
     <% for(var volume in volumes) { %>-v <%= volume %>:<%= volumes[volume] %> <% } %> \
     <% for(var args in docker.args) { %> <%- docker.args[args] %> <% } %> \
     <% if(sslConfig && typeof sslConfig.autogenerate === "object")  { %> \
